@@ -61,23 +61,39 @@ app.use('/api/hotels', require('./routes/hotels'));
 app.use('/api/locations', require('./routes/locations'));
 app.use('/api/admin', require('./routes/admin'));
 
-// Serve frontend for any non-API routes
-app.get('*', (req, res) => {
-  if (!req.path.startsWith('/api')) {
-    res.sendFile(path.join(__dirname, '../frontend', 'index.html'));
-  }
+// Root endpoint
+app.get('/', (req, res) => {
+  res.json({ 
+    message: 'Adventurous Travel Express API',
+    version: '1.0.0',
+    endpoints: {
+      health: '/api/health',
+      auth: '/api/auth',
+      tours: '/api/tours',
+      flights: '/api/flights',
+      taxis: '/api/taxis',
+      parks: '/api/parks',
+      bookings: '/api/bookings',
+      payments: '/api/payments'
+    }
+  });
 });
 
-// Error handler middleware 
-app.use(errorHandler);
-
-// Health check
+// Health check (before error handler)
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Server is running' });
 });
 
-const PORT = process.env.PORT || 5000;
+// Error handler middleware (must be last)
+app.use(errorHandler);
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+// Export for Vercel serverless
+module.exports = app;
+
+// Local development server
+if (process.env.NODE_ENV !== 'production') {
+  const PORT = process.env.PORT || 5000;
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}
