@@ -46,8 +46,6 @@ async function connectToDatabase() {
   const mongoUri = process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb://localhost:27017/adventurous-travel';
   
   await mongoose.connect(mongoUri, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
   });
 
   cachedDb = mongoose.connection;
