@@ -7,10 +7,23 @@ const path = require('path');
 
 dotenv.config();
 
-// Connect to database
-connectDB();
-
 const app = express();
+
+// Connect to database (only once)
+let isConnected = false;
+const ensureDbConnection = async () => {
+  if (!isConnected) {
+    await connectDB();
+    isConnected = true;
+  }
+};
+
+// Initialize DB connection for serverless
+if (process.env.NODE_ENV === 'production') {
+  ensureDbConnection().catch(console.error);
+} else {
+  connectDB();
+}
 
 // CORS Configuration
 const allowedOrigins = [
