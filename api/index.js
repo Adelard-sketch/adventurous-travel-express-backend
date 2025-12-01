@@ -38,23 +38,64 @@ app.use(express.urlencoded({ extended: true }));
 
 // Database connection with caching for serverless
 let cachedDb = null;
+let isConnecting = false;
+
 async function connectToDatabase() {
+  // Return cached connection if available
   if (cachedDb && mongoose.connection.readyState === 1) {
     return cachedDb;
   }
 
-  const mongoUri = process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb://localhost:27017/adventurous-travel';
-  
-  await mongoose.connect(mongoUri, {
-  });
+  // Prevent multiple simultaneous connection attempts
+  if (isConnecting) {
+    await new Promise(resolve => setTimeout(resolve, 100));
+    return connectToDatabase();
+  }
 
-  cachedDb = mongoose.connection;
-  console.log('✅ MongoDB Connected');
-  return cachedDb;
+  isConnecting = true;
+
+  try {
+    const mongoUri = process.env.MONGODB_URI || process.env.MONGO_URI;
+    
+    if (!mongoUri) {
+      throw new Error('MONGODB_URI environment variable is not set. Please configure it in Vercel dashboard.');
+    }
+
+    // Close existing connection if any
+    if (mongoose.connection.readyState !== 0) {
+      await mongoose.disconnect();
+    }
+
+    await mongoose.connect(mongoUri, {
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
+    });
+
+    cachedDb = mongoose.connection;
+    console.log('✅ MongoDB Connected');
+    return cachedDb;
+  } catch (error) {
+    console.error('❌ MongoDB Connection Error:', error.message);
+    cachedDb = null;
+    throw error;
+  } finally {
+    isConnecting = false;
+  }
 }
 
-// Initialize DB connection
-connectToDatabase().catch(err => console.error('DB Error:', err));
+// Middleware to ensure database connection
+app.use(async (req, res, next) => {
+  try {
+    await connectToDatabase();
+    next();
+  } catch (error) {
+    res.status(503).json({
+      success: false,
+      error: 'Database connection failed',
+      message: 'Please ensure MONGODB_URI is configured in Vercel environment variables'
+    });
+  }
+});
 
 // API Routes
 app.use('/api/auth', require('../routes/auth'));
@@ -71,20 +112,28 @@ app.use('/api/admin', require('../routes/admin'));
 
 // Root endpoint
 app.get('/', (req, res) => {
+  const dbState = ['disconnected', 'connected', 'connecting', 'disconnecting'][mongoose.connection.readyState];
   res.json({ 
     message: 'Adventurous Travel Express API',
     version: '1.0.0',
     status: 'running',
-    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
+    database: dbState,
+    environment: process.env.NODE_ENV || 'development',
+    mongoConfigured: !!process.env.MONGODB_URI
   });
 });
 
 // Health check
 app.get('/api/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
-    message: 'Server is running',
-    db: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
+  const dbState = ['disconnected', 'connected', 'connecting', 'disconnecting'][mongoose.connection.readyState];
+  const isHealthy = mongoose.connection.readyState === 1;
+  
+  res.status(isHealthy ? 200 : 503).json({ 
+    status: isHealthy ? 'ok' : 'degraded',
+    message: isHealthy ? 'Server is running' : 'Database connection issue',
+    database: dbState,
+    mongoConfigured: !!process.env.MONGODB_URI,
+    timestamp: new Date().toISOString()
   });
 });
 
