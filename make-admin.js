@@ -25,7 +25,7 @@ async function makeAdmin() {
       console.log(`User with email ${email} not found.`);
       console.log('\nCreating new admin user...');
       
-      const bcrypt = require('bcrypt');
+      const bcrypt = require('bcryptjs');
       const password = customPassword || 'Admin@123';
       
       const newAdmin = new User({
